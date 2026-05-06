@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Mic, MicOff, Play, Send } from 'lucide-react';
+import { Mic, MicOff, Play, Send, Loader } from 'lucide-react';
 import MessageBubble from './MessageBubble';
 import ConditionCard from './ConditionCard';
 import ResearchList from './ResearchList';
@@ -7,7 +7,7 @@ import CaseStudyList from './CaseStudyList';
 import AudioPlayer from './AudioPlayer';
 import AvatarLottie from './AvatarLottie';
 import AppointmentModal from './AppointmentModal';
-import { getMockResponse } from '../utils/mockData';
+import { checkSymptoms } from '../api/api';
 import './ChatWindow.css';
 
 const ChatWindow = () => {
@@ -19,12 +19,14 @@ const ChatWindow = () => {
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [recordedAudio, setRecordedAudio] = useState(null);
   const [isRecordingComplete, setIsRecordingComplete] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
   const messagesEndRef = useRef(null);
   const recognitionRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
 
-  const handleSendMessage = (text, isVoice = false, audioBlob = null) => {
+  const handleSendMessage = async (text, isVoice = false, audioBlob = null) => {
     if (!text.trim()) return;
 
     const userMessage = {
@@ -40,24 +42,60 @@ const ChatWindow = () => {
     setInputText('');
     setRecordedAudio(null);
     setIsRecordingComplete(false);
+    setError(null);
+    setIsLoading(true);
 
-    // Simulate API delay
-    setTimeout(() => {
-      // Pass the input text to get the appropriate response
-      const mockResponse = getMockResponse(text);
-      console.log('Mock response:', mockResponse); // Debug log
+    try {
+      // Call actual API endpoint
+      const result = await checkSymptoms(text);
       
-      const botMessage = {
+      if (result.success) {
+        const botMessage = {
+          id: Date.now() + 1,
+          type: 'bot',
+          content: result.diagnosis,
+          timestamp: new Date(),
+          isVoice: true
+        };
+
+        setMessages(prev => [...prev, botMessage]);
+        setCurrentResponse(result.diagnosis);
+      } else {
+        // Show error message
+        const errorMessage = {
+          id: Date.now() + 1,
+          type: 'bot',
+          content: {
+            plain_text_summary: `Error: ${result.error || 'Failed to process symptoms. Please try again.'}`,
+            potential_conditions: [],
+            medical_research: [],
+            past_case_studies: []
+          },
+          timestamp: new Date(),
+          isVoice: false
+        };
+        setMessages(prev => [...prev, errorMessage]);
+        setError(result.error);
+      }
+    } catch (err) {
+      console.error('Error processing symptoms:', err);
+      const errorMessage = {
         id: Date.now() + 1,
         type: 'bot',
-        content: mockResponse,
+        content: {
+          plain_text_summary: 'Error connecting to the server. Please ensure the backend is running.',
+          potential_conditions: [],
+          medical_research: [],
+          past_case_studies: []
+        },
         timestamp: new Date(),
-        isVoice: true // Force voice response to show audio player
+        isVoice: false
       };
-
-      setMessages(prev => [...prev, botMessage]);
-      setCurrentResponse(mockResponse);
-    }, 1000);
+      setMessages(prev => [...prev, errorMessage]);
+      setError('Network error. Is the backend running?');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSubmit = (e) => {
@@ -148,6 +186,7 @@ const ChatWindow = () => {
         <div className="header-content">
           <h1>AI Symptom Checker</h1>
           <p>Quickly understand your symptoms with our intelligent AI. Get personalized insights and potential condition suggestions to guide your next steps in health management.</p>
+          {error && <p style={{color: '#ff6b6b', marginTop: '10px'}}>⚠️ {error}</p>}
           <button className="start-check-btn">Start Symptom Check</button>
         </div>
       </div>
@@ -221,8 +260,8 @@ const ChatWindow = () => {
                 )}
               </div>
               
-              <button type="submit" className="send-btn">
-                <Send size={20} />
+              <button type="submit" className="send-btn" disabled={isLoading}>
+                {isLoading ? <Loader size={20} className="spinner" /> : <Send size={20} />}
               </button>
             </div>
           </form>
@@ -232,10 +271,19 @@ const ChatWindow = () => {
         <div className="results-section">
           <h2>Potential Conditions & Insights</h2>
           
-          {currentResponse ? (
+          {isLoading && (
+            <div className="loading-state">
+              <div className="spinner-box">
+                <Loader size={32} className="spinning" />
+                <p>Analyzing your symptoms...</p>
+              </div>
+            </div>
+          )}
+          
+          {currentResponse && !isLoading ? (
             <>
               <div className="conditions-list">
-                {currentResponse.potential_conditions.map((condition, index) => (
+                {currentResponse.potential_conditions && currentResponse.potential_conditions.map((condition, index) => (
                   <ConditionCard key={index} condition={condition} />
                 ))}
               </div>
@@ -253,9 +301,11 @@ const ChatWindow = () => {
               </div>
             </>
           ) : (
-            <div className="no-results">
-              <p>Start a conversation to see potential conditions and insights.</p>
-            </div>
+            !isLoading && (
+              <div className="no-results">
+                <p>Start a conversation to see potential conditions and insights.</p>
+              </div>
+            )
           )}
         </div>
       </div>

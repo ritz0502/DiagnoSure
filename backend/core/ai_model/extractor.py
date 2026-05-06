@@ -10,10 +10,21 @@ class MedicineExtractor:
     """
 
     def __init__(self):
-        # Load medicine names from DB for reference
-        self.medicine_names = list(
-            ExtractedMedicine.objects.values_list('name', flat=True)
-        )
+        # Lazy load medicine names - don't query DB at init time
+        self._medicine_names = None
+
+    @property
+    def medicine_names(self):
+        """Lazy load medicine names from DB"""
+        if self._medicine_names is None:
+            try:
+                self._medicine_names = list(
+                    ExtractedMedicine.objects.values_list('name', flat=True)
+                )
+            except:
+                # If table doesn't exist yet (during migration), return empty
+                self._medicine_names = []
+        return self._medicine_names
 
     def extract_medicines_from_image(self, image_path=None):
         """

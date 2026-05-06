@@ -11,7 +11,8 @@ from .serializers import (
     PostSerializer,
     CommentSerializer,
     CategorySerializer,
-    ExtractedMedicineSerializer
+    ExtractedMedicineSerializer,
+    ReminderSerializer
 )
 from .utils import send_notification
 from .ai_model.extractor import MedicineExtractor
@@ -24,11 +25,163 @@ from rest_framework.decorators import api_view, permission_classes, authenticati
 
 extractor = MedicineExtractor()
 
+
+# -----------------------
+# Sample symptom checking response generator
+# -----------------------
+def get_symptom_diagnosis(symptoms_text):
+    """
+    Generate a diagnosis response based on symptom input.
+    This mimics the mockData structure from the frontend.
+    """
+    symptoms_lower = symptoms_text.lower()
+    
+    # Keyword matching to determine response type
+    if any(word in symptoms_lower for word in ['cough', 'cold', 'sinus', 'congestion', 'runny nose', 'sore throat']):
+        return {
+            'plain_text_summary': "Based on your symptoms of cough, cold, and mild sinus issues, you may be experiencing a common upper respiratory infection or seasonal allergies. These symptoms typically indicate inflammation in your nasal passages and throat.",
+            'potential_conditions': [
+                {
+                    'name': 'Common Cold (Viral Upper Respiratory Infection)',
+                    'confidence': 0.75,
+                    'insights': 'Your symptoms align closely with a typical viral cold. The combination of cough, nasal congestion, and sinus pressure is characteristic of viral upper respiratory infections.',
+                    'evidence_links': [
+                        {'label': 'CDC Cold Info', 'url': 'https://www.cdc.gov/features/rhinoviruses/'},
+                    ]
+                },
+                {
+                    'name': 'Seasonal Allergic Rhinitis',
+                    'confidence': 0.65,
+                    'insights': 'The mild sinus symptoms combined with cough could indicate seasonal allergies.',
+                    'evidence_links': [
+                        {'label': 'Allergy Foundation', 'url': 'https://www.aafa.org/allergic-rhinitis/'},
+                    ]
+                },
+                {
+                    'name': 'Acute Sinusitis',
+                    'confidence': 0.45,
+                    'insights': 'While your sinus symptoms are mild, acute sinusitis remains a possibility.',
+                    'evidence_links': [
+                        {'label': 'ENT Specialists', 'url': 'https://www.entnet.org/content/sinusitis'},
+                    ]
+                }
+            ],
+            'medical_research': [
+                {
+                    'title': 'Viral Upper Respiratory Infections: Current Understanding',
+                    'summary': 'Recent research indicates that most upper respiratory infections are self-limiting viral conditions.',
+                    'link': 'https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7152197/'
+                }
+            ],
+            'past_case_studies': [
+                {
+                    'case_id': 'URI-2024-001',
+                    'short_summary': '32-year-old patient with similar cold and sinus symptoms recovered fully within 8 days.',
+                    'link': 'https://example.com/case-study/uri-001'
+                }
+            ]
+        }
+    elif any(word in symptoms_lower for word in ['rash', 'itching', 'itch', 'skin', 'dermatitis']):
+        return {
+            'plain_text_summary': "Your symptoms of rashes and skin itching suggest a dermatological condition that could range from allergic reactions to eczema or contact dermatitis.",
+            'potential_conditions': [
+                {
+                    'name': 'Contact Dermatitis',
+                    'confidence': 0.80,
+                    'insights': 'Contact dermatitis is a common cause of itchy rashes, occurring when skin comes into contact with irritants or allergens.',
+                    'evidence_links': [
+                        {'label': 'AAD Contact Dermatitis', 'url': 'https://www.aad.org/public/diseases/eczema/types/contact-dermatitis'},
+                    ]
+                },
+                {
+                    'name': 'Atopic Dermatitis (Eczema)',
+                    'confidence': 0.70,
+                    'insights': 'Eczema commonly presents with itchy, inflamed skin that may appear as red, scaly patches.',
+                    'evidence_links': [
+                        {'label': 'National Eczema Assoc', 'url': 'https://nationaleczema.org/eczema/'},
+                    ]
+                },
+                {
+                    'name': 'Allergic Reaction',
+                    'confidence': 0.60,
+                    'insights': 'An allergic reaction could cause widespread itchy rashes, especially if exposed to new substances.',
+                    'evidence_links': [
+                        {'label': 'ACAAI Skin Allergies', 'url': 'https://acaai.org/allergies/allergic-conditions/skin-allergies/'},
+                    ]
+                }
+            ],
+            'medical_research': [
+                {
+                    'title': 'Management of Chronic Itchy Skin Conditions',
+                    'summary': 'Recent studies highlight the importance of identifying triggers and implementing appropriate skincare routines.',
+                    'link': 'https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8745231/'
+                }
+            ],
+            'past_case_studies': [
+                {
+                    'case_id': 'DRM-2024-005',
+                    'short_summary': '45-year-old with contact dermatitis from new laundry detergent resolved after switching products.',
+                    'link': 'https://example.com/case-study/drm-005'
+                }
+            ]
+        }
+    else:
+        # Generic response for unknown symptoms
+        return {
+            'plain_text_summary': f"Based on your reported symptoms, we recommend consulting with a healthcare professional for a proper diagnosis. Please provide more details about your symptoms for better assessment.",
+            'potential_conditions': [
+                {
+                    'name': 'General Medical Consultation Needed',
+                    'confidence': 0.50,
+                    'insights': 'Your symptoms require professional medical evaluation. Please describe symptoms in more detail.',
+                    'evidence_links': []
+                }
+            ],
+            'medical_research': [],
+            'past_case_studies': []
+        }
+
 # -----------------------
 # Home / health check
 # -----------------------
 def home(request):
     return JsonResponse({"message": "Healthcare Backend is running"})
+
+
+# -----------------------
+# Symptom Checker (ML Model Integration)
+# -----------------------
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def check_symptoms(request):
+    """
+    Receive symptoms from user and return potential diagnoses.
+    Input: {"symptoms": "user symptom description"}
+    Output: Diagnosis with conditions, research, and case studies
+    """
+    try:
+        symptoms_input = request.data.get('symptoms', '').strip()
+        
+        if not symptoms_input:
+            return Response({
+                'error': 'Please provide symptom description',
+                'success': False
+            }, status=400)
+        
+        # Get diagnosis based on symptoms
+        diagnosis = get_symptom_diagnosis(symptoms_input)
+        
+        return Response({
+            'success': True,
+            'input_symptoms': symptoms_input,
+            **diagnosis
+        })
+    
+    except Exception as e:
+        return Response({
+            'error': str(e),
+            'success': False
+        }, status=500)
 
 
 # -----------------------
@@ -276,44 +429,8 @@ def post_vote(request, post_id, action):
 
 
 # -----------------------
-# List all reminders (public)
+# Test notifications
 # -----------------------
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def list_all_reminders(request):
-    appointment_reminders = Reminder.objects.filter(appointment__isnull=False)
-    prescription_reminders = Reminder.objects.filter(appointment__isnull=True)
-
-    all_reminders = list(appointment_reminders) + list(prescription_reminders)
-    all_reminders.sort(key=lambda r: r.remind_at)
-
-    response_data = []
-    for r in all_reminders:
-        if r.appointment:
-            response_data.append({
-                "type": "appointment",
-                "doctor": r.appointment.doctor_name,
-                "hospital": r.appointment.hospital_name,
-                "date": r.appointment.date,
-                "time": r.appointment.time,
-                "remind_at": r.remind_at
-            })
-        else:
-            response_data.append({
-                "type": "prescription",
-                "remind_at": r.remind_at
-            })
-
-    return Response({"reminders": response_data})
-
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def list_appointments(request):
-    appointments = Appointment.objects.all()
-    serializer = AppointmentSerializer(appointments, many=True)
-    return Response(serializer.data)
-
-
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def test_notify(request):
@@ -323,3 +440,4 @@ def test_notify(request):
         return Response({"success": True, "message": "Notification sent"})
     except Exception as e:
         return Response({"error": str(e)}, status=500)
+

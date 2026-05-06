@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { uploadPrescription } from '../api/api';
 import './PrescriptionReader.css';
 
 const PrescriptionReader = () => {
@@ -10,6 +11,8 @@ const PrescriptionReader = () => {
   const [fileType, setFileType] = useState('');
   const [fileSize, setFileSize] = useState('');
   const [extractedText, setExtractedText] = useState('');
+  const [extractedMedicines, setExtractedMedicines] = useState([]);
+  const [error, setError] = useState('');
 
   const handleImageUpload = (event) => {
     const file = event.target.files[0];
@@ -75,50 +78,39 @@ const PrescriptionReader = () => {
     if (!uploadedFile) return;
     
     setIsAnalyzing(true);
+    setError('');
     
     try {
-      // Simulate file processing - this is where you'd integrate your AI model
-      // For now, we'll simulate the analysis process
+      // Call the real API to upload and extract medicines
+      const result = await uploadPrescription(uploadedFile);
       
-      // Step 1: Simulate OCR/Text extraction
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Simulate extracted text based on file type
-      let mockExtractedText = '';
-      if (fileType.startsWith('image/')) {
-        mockExtractedText = `Dr. Sarah Johnson, MD
-        Date: ${new Date().toLocaleDateString()}
+      if (result.success) {
+        // Extract medicines from response
+        setExtractedMedicines(result.medicines.medicines || []);
         
-        Patient: John Smith
+        // Build extracted text summary
+        const medicinesText = result.medicines.medicines
+          ? result.medicines.medicines
+              .map(med => `- ${med.name} (${med.dosage}) - Confidence: ${(med.confidence * 100).toFixed(0)}%`)
+              .join('\n')
+          : 'No medicines extracted';
         
-        Rx:
-        1. Amoxicillin 500mg - Take 1 capsule 3 times daily for 7 days
-        2. Ibuprofen 200mg - Take 1 tablet every 4-6 hours as needed for pain
-        3. Omeprazole 20mg - Take 1 capsule once daily before breakfast
+        setExtractedText(`Prescription Analysis - ${new Date().toLocaleDateString()}
         
-        Instructions: Complete full course of antibiotics. Take with food if stomach upset occurs.`;
+${result.medicines.message || ''}
+
+Extracted Medicines:
+${medicinesText}`);
+        
+        setShowAnalysis(true);
       } else {
-        mockExtractedText = `Medical Prescription - PDF Document
-        
-        Prescribed medications extracted:
-        - Amoxicillin 500mg capsules
-        - Ibuprofen 200mg tablets  
-        - Omeprazole 20mg capsules
-        
-        Dosage and instructions as per physician recommendations.`;
+        setError(result.error || 'Failed to process prescription');
+        alert('Error: ' + (result.error || 'Failed to process prescription'));
       }
-      
-      setExtractedText(mockExtractedText);
-      
-      // Step 2: Simulate AI analysis
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Show results
-      setShowAnalysis(true);
-      
     } catch (error) {
-      console.error('Error processing file:', error);
-      alert('Error processing the prescription. Please try again.');
+      console.error('Error uploading prescription:', error);
+      setError('Network error. Is the backend running?');
+      alert('Error processing the prescription. Please ensure the backend is running.');
     } finally {
       setIsAnalyzing(false);
     }
@@ -139,6 +131,7 @@ const PrescriptionReader = () => {
             manage your health more effectively. Upload your prescription and let AI
             do the rest.
           </p>
+          {error && <p style={{color: '#ff6b6b', marginTop: '10px'}}>⚠️ {error}</p>}
         </div>
 
         <div className="hero-section">
@@ -258,50 +251,30 @@ const PrescriptionReader = () => {
                 <div className="results-section">
                   <h4 className="section-title">Extracted Medications</h4>
                   
-                  <div className="medication-item">
-                    <div className="medication-icon">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-                        <line x1="8" y1="21" x2="16" y2="21"/>
-                        <line x1="12" y1="17" x2="12" y2="21"/>
-                      </svg>
+                  {extractedMedicines && extractedMedicines.length > 0 ? (
+                    extractedMedicines.map((medicine, index) => (
+                      <div key={index} className="medication-item">
+                        <div className="medication-icon">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                            <line x1="8" y1="21" x2="16" y2="21"/>
+                            <line x1="12" y1="17" x2="12" y2="21"/>
+                          </svg>
+                        </div>
+                        <div className="medication-details">
+                          <h5>{medicine.name}</h5>
+                          <p><strong>Dosage:</strong> {medicine.dosage}</p>
+                          <p><strong>Uses:</strong> {medicine.uses || 'As prescribed'}</p>
+                          <p className="instruction"><strong>Description:</strong> {medicine.description || 'No description available'}</p>
+                          <p style={{fontSize: '0.85em', color: '#888'}}>Confidence: {(medicine.confidence * 100).toFixed(0)}%</p>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="empty-state">
+                      <p>No medicines extracted yet. Upload a prescription to extract medicines.</p>
                     </div>
-                    <div className="medication-details">
-                      <h5>Amoxicillin 500mg</h5>
-                      <p>Take one capsule three times a day for 7 days.</p>
-                      <p className="instruction">Finish the entire course of medication, even if symptoms improve.</p>
-                    </div>
-                  </div>
-
-                  <div className="medication-item">
-                    <div className="medication-icon">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-                        <line x1="8" y1="21" x2="16" y2="21"/>
-                        <line x1="12" y1="17" x2="12" y2="21"/>
-                      </svg>
-                    </div>
-                    <div className="medication-details">
-                      <h5>Ibuprofen 200mg</h5>
-                      <p>Take one tablet every 4-6 hours as needed for pain, do not exceed 1200mg in 24 hours.</p>
-                      <p className="instruction">Take with food or milk to prevent stomach upset.</p>
-                    </div>
-                  </div>
-
-                  <div className="medication-item">
-                    <div className="medication-icon">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-                        <line x1="8" y1="21" x2="16" y2="21"/>
-                        <line x1="12" y1="17" x2="12" y2="21"/>
-                      </svg>
-                    </div>
-                    <div className="medication-details">
-                      <h5>Omeprazole 20mg</h5>
-                      <p>Take one capsule once daily before breakfast.</p>
-                      <p className="instruction">Swallow whole. Do not crush or chew.</p>
-                    </div>
-                  </div>
+                  )}
                 </div>
 
                 <div className="results-section">

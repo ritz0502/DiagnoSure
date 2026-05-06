@@ -30,7 +30,6 @@ class Appointment(models.Model):
         return f"{self.doctor_name} - {self.hospital_name} on {self.date}"
 
 
-
 class Reminder(models.Model):
     appointment = models.ForeignKey(Appointment, on_delete=models.CASCADE)
     remind_at = models.DateTimeField()
